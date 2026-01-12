@@ -45,18 +45,37 @@ def load_gras() -> pd.DataFrame:
 @st.cache_data
 def get_institution_list() -> pd.DataFrame:
     """
-    Get unique institutions from both datasets with country info.
+    Get unique institutions from both datasets with country info and Institution_ID.
     Combines ARWU and GRAS institutions, removes duplicates,
     and adds normalized search key.
     
     Returns:
-        DataFrame with columns: Institution, Country/Region, __searchkey
+        DataFrame with columns: Institution, Country/Region, Institution_ID, __searchkey
     """
-    arwu = load_arwu()[["Institution", "Country/Region"]].drop_duplicates()
-    gras = load_gras()[["Institution", "Country/Region"]].drop_duplicates()
+    arwu = load_arwu()
+    gras = load_gras()
+    
+    # Select relevant columns (include Institution_ID if available)
+    arwu_cols = ["Institution", "Country/Region"]
+    gras_cols = ["Institution", "Country/Region"]
+    
+    if "Institution_ID" in arwu.columns:
+        arwu_cols.append("Institution_ID")
+    if "Institution_ID" in gras.columns:
+        gras_cols.append("Institution_ID")
+    
+    arwu_pairs = arwu[arwu_cols].drop_duplicates()
+    gras_pairs = gras[gras_cols].drop_duplicates()
     
     # Combine and deduplicate
-    combined = pd.concat([arwu, gras]).drop_duplicates(subset=["Institution"])
+    combined = pd.concat([arwu_pairs, gras_pairs])
+    
+    # If Institution_ID exists, deduplicate by it; otherwise by Institution
+    if "Institution_ID" in combined.columns:
+        combined = combined.drop_duplicates(subset=["Institution_ID"])
+    else:
+        combined = combined.drop_duplicates(subset=["Institution", "Country/Region"])
+    
     combined["__searchkey"] = combined["Institution"].apply(norm)
     combined = combined.sort_values("Institution").reset_index(drop=True)
     
@@ -105,7 +124,14 @@ def search_institutions(df: pd.DataFrame, query: str, max_results: int = 200) ->
     m_contains["_match_priority"] = 1
     
     # Combine, deduplicate, sort by priority then name
-    results = pd.concat([m_starts, m_contains]).drop_duplicates(subset=["Institution"])
+    results = pd.concat([m_starts, m_contains])
+    
+    # Deduplicate by Institution_ID if available, otherwise by Institution
+    if "Institution_ID" in results.columns:
+        results = results.drop_duplicates(subset=["Institution_ID"])
+    else:
+        results = results.drop_duplicates(subset=["Institution"])
+    
     results = results.sort_values(["_match_priority", "Institution"]).head(max_results)
     results = results.drop(columns=["_match_priority"])
     
@@ -159,3 +185,22 @@ def get_gras_subjects(field: str = None) -> list:
     if field:
         gras = gras[gras["Field"] == field]
     return sorted(gras["Subject"].unique().tolist())
+
+
+def filter_by_institution(df: pd.DataFrame, inst_id: str = None, inst_name: str = None) -> pd.DataFrame:
+    """
+    Filter dataframe by institution using ID (preferred) or name as fallback.
+    
+    Args:
+        df: DataFrame to filter
+        inst_id: Institution ID (preferred)
+        inst_name: Institution name (fallback)
+    
+    Returns:
+        Filtered DataFrame
+    """
+    if inst_id and "Institution_ID" in df.columns:
+        return df[df["Institution_ID"] == inst_id]
+    elif inst_name:
+        return df[df["Institution"] == inst_name]
+    return df.head(0)
