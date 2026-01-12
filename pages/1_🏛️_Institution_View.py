@@ -20,6 +20,102 @@ gras_df = load_gras()
 institutions_df = get_institution_list()
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+def get_default_subjects(gras_inst, max_display=10):
+    """Get default subjects to display based on ranking history."""
+    all_subjects = gras_inst["Subject"].unique().tolist()
+    
+    # If 10 or fewer subjects total, display all
+    if len(all_subjects) <= max_display:
+        return sorted(all_subjects), []
+    
+    # Otherwise, prioritize by most recent year
+    selected = []
+    years_desc = sorted(gras_inst["Year"].unique(), reverse=True)
+    
+    for year in years_desc:
+        year_subjects = gras_inst[gras_inst["Year"] == year]["Subject"].tolist()
+        for subj in year_subjects:
+            if subj not in selected:
+                selected.append(subj)
+            if len(selected) >= max_display:
+                break
+        if len(selected) >= max_display:
+            break
+    
+    remaining = [s for s in all_subjects if s not in selected]
+    return selected, remaining
+
+
+def get_context_institutions(df, inst_name, country, year, rank_col, n_above=2, n_below=2, top_n=3):
+    """Get top N + institutions ranked just above/below selected institution."""
+    country_data = df[
+        (df["Country/Region"] == country) & 
+        (df["Year"] == year)
+    ].sort_values(rank_col).reset_index(drop=True)
+    
+    if country_data.empty:
+        return []
+    
+    # Get top N
+    top_institutions = country_data.head(top_n)["Institution"].tolist()
+    
+    # Find selected institution's position
+    inst_idx = country_data[country_data["Institution"] == inst_name].index
+    if len(inst_idx) == 0:
+        return top_institutions + [inst_name]
+    
+    inst_idx = inst_idx[0]
+    
+    # Get institutions above and below
+    above_institutions = []
+    below_institutions = []
+    
+    for i in range(1, n_above + 1):
+        if inst_idx - i >= 0:
+            above_inst = country_data.iloc[inst_idx - i]["Institution"]
+            if above_inst not in top_institutions and above_inst != inst_name:
+                above_institutions.append(above_inst)
+    
+    for i in range(1, n_below + 1):
+        if inst_idx + i < len(country_data):
+            below_inst = country_data.iloc[inst_idx + i]["Institution"]
+            if below_inst not in top_institutions and below_inst != inst_name:
+                below_institutions.append(below_inst)
+    
+    # Combine: top + above + selected + below (remove duplicates)
+    result = []
+    for inst in top_institutions + above_institutions + [inst_name] + below_institutions:
+        if inst not in result:
+            result.append(inst)
+    
+    return result
+
+
+def add_line_labels(fig, df, x_col, y_col, name_col, year_max):
+    """Add institution names at the end of lines."""
+    for trace in fig.data:
+        inst_name = trace.name
+        inst_data = df[df[name_col] == inst_name]
+        if not inst_data.empty:
+            # Get the last valid point
+            last_valid = inst_data[inst_data[y_col].notna()].sort_values(x_col)
+            if not last_valid.empty:
+                last_row = last_valid.iloc[-1]
+                fig.add_annotation(
+                    x=last_row[x_col],
+                    y=last_row[y_col],
+                    text=inst_name[:20] + "..." if len(inst_name) > 20 else inst_name,
+                    showarrow=False,
+                    xanchor="left",
+                    xshift=10,
+                    font=dict(size=9),
+                    opacity=0.8
+                )
+
+
+# ============================================================================
 # SEARCH SECTION
 # ============================================================================
 st.markdown("### Find your institution")
@@ -105,32 +201,39 @@ else:
     
     # ---------- ARWU Country Positioning (Regional Rank Evolution) ----------
     st.markdown("### Country Positioning")
-    st.caption(f"Top 10 institutions in {inst_country} (2025) + selected institution. Showing regional rank evolution.")
+    st.caption(f"Top 3 in {inst_country} (2025) + 2 above/below selected institution. Hover for world rank.")
     
-    latest_year = arwu_inst["Year"].max()
+    # Get context institutions
+    context_institutions = get_context_institutions(
+        arwu_df, inst_name, inst_country, 2025, "Region_Rank_recomputed",
+        n_above=2, n_below=2, top_n=3
+    )
     
-    # Get top 10 from country in 2025
-    arwu_country_2025 = arwu_df[
-        (arwu_df["Country/Region"] == inst_country) & 
-        (arwu_df["Year"] == 2025)
-    ].nsmallest(10, "Region_Rank_recomputed")
+    # Get other institutions from same country for manual addition
+    all_country_institutions = arwu_df[
+        arwu_df["Country/Region"] == inst_country
+    ]["Institution"].unique().tolist()
+    other_country_institutions = [i for i in all_country_institutions if i not in context_institutions]
     
-    top10_institutions = arwu_country_2025["Institution"].tolist()
+    additional_arwu = st.multiselect(
+        f"Add more institutions from {inst_country}",
+        options=sorted(other_country_institutions),
+        default=[],
+        key="arwu_country_add"
+    )
     
-    # Add selected institution if not in top 10
-    if inst_name not in top10_institutions:
-        top10_institutions.append(inst_name)
+    display_institutions = context_institutions + additional_arwu
     
     # Get all data for these institutions
     arwu_country_all = arwu_df[
         (arwu_df["Country/Region"] == inst_country) & 
-        (arwu_df["Institution"].isin(top10_institutions))
+        (arwu_df["Institution"].isin(display_institutions))
     ].copy()
     
     fig_country = go.Figure()
     colors = px.colors.qualitative.Plotly
     
-    for i, institution in enumerate(top10_institutions):
+    for i, institution in enumerate(display_institutions):
         inst_data = arwu_country_all[arwu_country_all["Institution"] == institution].sort_values("Year")
         inst_plot = inst_data.set_index("Year").reindex(all_years)
         
@@ -138,7 +241,6 @@ else:
         line_width = 4 if is_selected else 2
         line_color = "#e74c3c" if is_selected else colors[i % len(colors)]
         
-        # Create custom hover with world rank
         hover_text = []
         for yr in all_years:
             if yr in inst_data["Year"].values:
@@ -161,20 +263,32 @@ else:
             text=hover_text
         ))
     
+    # Add labels at end of lines
+    for i, institution in enumerate(display_institutions):
+        inst_data = arwu_country_all[arwu_country_all["Institution"] == institution]
+        last_valid = inst_data[inst_data["Region_Rank_recomputed"].notna()].sort_values("Year")
+        if not last_valid.empty:
+            last_row = last_valid.iloc[-1]
+            is_selected = institution == inst_name
+            fig_country.add_annotation(
+                x=last_row["Year"],
+                y=last_row["Region_Rank_recomputed"],
+                text=institution[:25] + "…" if len(institution) > 25 else institution,
+                showarrow=False,
+                xanchor="left",
+                xshift=10,
+                font=dict(size=9, color="#e74c3c" if is_selected else "#555"),
+                opacity=0.9
+            )
+    
     fig_country.update_layout(
         title=f"Regional Rank Evolution - {inst_country}",
-        xaxis=dict(title="Year", dtick=1, range=[2016.5, 2025.5]),
+        xaxis=dict(title="Year", dtick=1, range=[2016.5, 2026.5]),
         yaxis=dict(title=f"Regional Rank ({inst_country})", autorange="reversed"),
         height=500,
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.15,
-            xanchor="center",
-            x=0.5,
-            font=dict(size=10)
-        ),
-        hovermode="closest"
+        showlegend=False,
+        hovermode="closest",
+        margin=dict(r=200)
     )
     
     st.plotly_chart(fig_country, use_container_width=True)
@@ -191,7 +305,6 @@ else:
     # ---------- GRAS Rankings Table ----------
     st.markdown("### Rankings Overview")
     
-    # Pivot table: subjects x years
     gras_pivot = gras_inst.pivot_table(
         index="Subject",
         columns="Year",
@@ -199,14 +312,12 @@ else:
         aggfunc="first"
     ).reset_index()
     
-    # Sort by 2025 rank (or latest available)
     gras_years = sorted(gras_inst["Year"].unique(), reverse=True)
     for yr in gras_years:
         if yr in gras_pivot.columns:
             gras_pivot = gras_pivot.sort_values(yr, na_position="last")
             break
     
-    # Format for display
     gras_display = gras_pivot.copy()
     year_cols = [c for c in gras_display.columns if isinstance(c, int)]
     for col in year_cols:
@@ -223,24 +334,22 @@ else:
     st.markdown("### Subject Rank Evolution")
     
     latest_gras_year = gras_inst["Year"].max()
-    gras_latest = gras_inst[gras_inst["Year"] == latest_gras_year].nsmallest(10, "Rank_global")
-    top_subjects = gras_latest["Subject"].tolist()
+    default_subjects, other_subjects = get_default_subjects(gras_inst, max_display=10)
     
-    # Get all subjects for dropdown
+    # Determine which subjects are ranked in 2025
+    subjects_in_2025 = gras_inst[gras_inst["Year"] == 2025]["Subject"].tolist()
+    
+    # Multiselect with default subjects
     all_inst_subjects = sorted(gras_inst["Subject"].unique().tolist())
-    other_subjects = [s for s in all_inst_subjects if s not in top_subjects]
     
-    # Multi-select for additional subjects
-    additional_subjects = st.multiselect(
-        "Add more subjects to display",
-        options=other_subjects,
-        default=[],
-        placeholder="Select additional subjects..."
+    display_subjects = st.multiselect(
+        "Subjects to display (add or remove)",
+        options=all_inst_subjects,
+        default=default_subjects,
+        key="gras_subjects_display"
     )
     
-    display_subjects = top_subjects + additional_subjects
-    
-    st.caption(f"Showing top 10 subjects from {latest_gras_year} + selected. Click legend to show/hide.")
+    st.caption("━━ Plain line: ranked in 2025 | ┅┅ Dotted line: not ranked in 2025")
     
     gras_top = gras_inst[gras_inst["Subject"].isin(display_subjects)].copy()
     
@@ -252,9 +361,8 @@ else:
         subj_data = gras_top[gras_top["Subject"] == subject].sort_values("Year")
         subj_plot = subj_data.set_index("Year").reindex(all_gras_years)
         
-        # Different style for manually added subjects
-        is_additional = subject in additional_subjects
-        line_dash = "dash" if is_additional else "solid"
+        is_in_2025 = subject in subjects_in_2025
+        line_dash = "solid" if is_in_2025 else "dot"
         
         fig_gras_evo.add_trace(go.Scatter(
             x=all_gras_years,
@@ -287,9 +395,9 @@ else:
     
     # ---------- GRAS Country Positioning ----------
     st.markdown("### Country Positioning by Subject")
-    st.caption(f"Top 10 institutions in {inst_country} for selected subject + selected institution.")
+    st.caption(f"Top 3 in {inst_country} (2025) + 2 above/below selected institution. Hover for global rank.")
+    st.caption("━━ Plain line: ranked in 2025 | ┅┅ Dotted line: not ranked in 2025")
     
-    # Get subjects where institution appears
     inst_subjects = sorted(gras_inst["Subject"].unique().tolist())
     
     selected_subject = st.selectbox(
@@ -299,39 +407,55 @@ else:
     )
     
     if selected_subject:
-        # Get top 10 from country in 2025 for this subject
-        gras_country_2025 = gras_df[
-            (gras_df["Country/Region"] == inst_country) & 
-            (gras_df["Year"] == latest_gras_year) &
+        # Get context institutions for this subject
+        gras_context = get_context_institutions(
+            gras_df[gras_df["Subject"] == selected_subject],
+            inst_name, inst_country, 2025, "Rank_region",
+            n_above=2, n_below=2, top_n=3
+        )
+        
+        # Get other institutions from same country for this subject
+        all_gras_country = gras_df[
+            (gras_df["Country/Region"] == inst_country) &
             (gras_df["Subject"] == selected_subject)
-        ].nsmallest(10, "Rank_region")
+        ]["Institution"].unique().tolist()
+        other_gras_country = [i for i in all_gras_country if i not in gras_context]
         
-        top10_gras_institutions = gras_country_2025["Institution"].tolist()
+        additional_gras_country = st.multiselect(
+            f"Add more institutions from {inst_country}",
+            options=sorted(other_gras_country),
+            default=[],
+            key="gras_country_add"
+        )
         
-        # Add selected institution if not in top 10
-        if inst_name not in top10_gras_institutions:
-            top10_gras_institutions.append(inst_name)
+        gras_display_institutions = gras_context + additional_gras_country
         
-        # Get all data for these institutions in this subject
+        # Get institutions ranked in 2025 for this subject
+        gras_2025_institutions = gras_df[
+            (gras_df["Subject"] == selected_subject) &
+            (gras_df["Year"] == 2025)
+        ]["Institution"].tolist()
+        
         gras_country_all = gras_df[
             (gras_df["Country/Region"] == inst_country) & 
             (gras_df["Subject"] == selected_subject) &
-            (gras_df["Institution"].isin(top10_gras_institutions))
+            (gras_df["Institution"].isin(gras_display_institutions))
         ].copy()
         
         if not gras_country_all.empty:
             fig_gras_country = go.Figure()
             all_gras_years = list(range(2021, 2026))
             
-            for i, institution in enumerate(top10_gras_institutions):
+            for i, institution in enumerate(gras_display_institutions):
                 inst_subj_data = gras_country_all[gras_country_all["Institution"] == institution].sort_values("Year")
                 inst_subj_plot = inst_subj_data.set_index("Year").reindex(all_gras_years)
                 
                 is_selected = institution == inst_name
+                is_in_2025 = institution in gras_2025_institutions
                 line_width = 4 if is_selected else 2
                 line_color = "#e74c3c" if is_selected else colors[i % len(colors)]
+                line_dash = "solid" if is_in_2025 else "dot"
                 
-                # Create custom hover with global rank
                 hover_text = []
                 for yr in all_gras_years:
                     if yr in inst_subj_data["Year"].values:
@@ -349,27 +473,39 @@ else:
                     y=inst_subj_plot["Rank_region"],
                     mode="lines+markers",
                     name=institution,
-                    line=dict(color=line_color, width=line_width),
+                    line=dict(color=line_color, width=line_width, dash=line_dash),
                     marker=dict(size=8 if not is_selected else 12),
                     connectgaps=False,
                     hovertemplate="%{text}<extra></extra>",
                     text=hover_text
                 ))
             
+            # Add labels at end of lines
+            for i, institution in enumerate(gras_display_institutions):
+                inst_data = gras_country_all[gras_country_all["Institution"] == institution]
+                last_valid = inst_data[inst_data["Rank_region"].notna()].sort_values("Year")
+                if not last_valid.empty:
+                    last_row = last_valid.iloc[-1]
+                    is_selected = institution == inst_name
+                    fig_gras_country.add_annotation(
+                        x=last_row["Year"],
+                        y=last_row["Rank_region"],
+                        text=institution[:25] + "…" if len(institution) > 25 else institution,
+                        showarrow=False,
+                        xanchor="left",
+                        xshift=10,
+                        font=dict(size=9, color="#e74c3c" if is_selected else "#555"),
+                        opacity=0.9
+                    )
+            
             fig_gras_country.update_layout(
                 title=f"{selected_subject} - Regional Rank Evolution in {inst_country}",
-                xaxis=dict(title="Year", dtick=1, range=[2020.5, 2025.5]),
+                xaxis=dict(title="Year", dtick=1, range=[2020.5, 2026.5]),
                 yaxis=dict(title=f"Regional Rank ({inst_country})", autorange="reversed"),
                 height=500,
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.15,
-                    xanchor="center",
-                    x=0.5,
-                    font=dict(size=10)
-                ),
-                hovermode="closest"
+                showlegend=False,
+                hovermode="closest",
+                margin=dict(r=200)
             )
             
             st.plotly_chart(fig_gras_country, use_container_width=True)
@@ -405,7 +541,6 @@ with col_search:
     
     if q_bench:
         results_bench = search_institutions(institutions_df, q_bench)
-        # Exclude current institution and already selected ones
         already_selected = [inst_name] + st.session_state.benchmark_institutions
         results_bench = results_bench[~results_bench["Institution"].isin(already_selected)]
         
@@ -422,7 +557,6 @@ with col_tags:
     if not st.session_state.benchmark_institutions:
         st.caption("No institutions selected yet. Search and add institutions to compare.")
     else:
-        # Display tags with remove buttons
         cols = st.columns(min(len(st.session_state.benchmark_institutions), 4))
         for i, bench_inst in enumerate(st.session_state.benchmark_institutions):
             with cols[i % 4]:
@@ -430,22 +564,21 @@ with col_tags:
                     st.session_state.benchmark_institutions.remove(bench_inst)
                     st.rerun()
 
-# Subject selector for GRAS benchmark
+# Subject selector for GRAS benchmark - only subjects where selected institution appears
 if benchmark_type == "GRAS Subject":
-    all_subjects = sorted(gras_df["Subject"].unique().tolist())
-    default_subj_idx = 0
-    if not gras_inst.empty:
-        latest_gras_year = gras_inst["Year"].max()
-        gras_latest = gras_inst[gras_inst["Year"] == latest_gras_year].nsmallest(1, "Rank_global")
-        if not gras_latest.empty and gras_latest.iloc[0]["Subject"] in all_subjects:
-            default_subj_idx = all_subjects.index(gras_latest.iloc[0]["Subject"])
-    
-    bench_subject = st.selectbox(
-        "Select subject to compare",
-        options=all_subjects,
-        index=default_subj_idx,
-        key="bench_subject"
-    )
+    if gras_inst.empty:
+        st.warning(f"{inst_name} has no GRAS rankings to compare.")
+        bench_subject = None
+    else:
+        inst_subjects_benchmark = sorted(gras_inst["Subject"].unique().tolist())
+        default_subj_idx = 0
+        
+        bench_subject = st.selectbox(
+            "Select subject to compare (only subjects where institution is ranked)",
+            options=inst_subjects_benchmark,
+            index=default_subj_idx,
+            key="bench_subject"
+        )
 
 # Generate benchmark chart
 st.markdown("---")
@@ -458,7 +591,6 @@ if benchmark_type == "ARWU Overall":
         all_years = list(range(2017, 2026))
         colors_bench = ["#1f77b4", "#e74c3c", "#2ca02c", "#9467bd", "#ff7f0e", "#8c564b", "#17becf", "#bcbd22"]
         
-        # Add main institution
         if not arwu_inst.empty:
             arwu1_plot = arwu_inst.set_index("Year").reindex(all_years)
             fig_bench.add_trace(go.Scatter(
@@ -472,7 +604,6 @@ if benchmark_type == "ARWU Overall":
                 hovertemplate=f"<b>{inst_name}</b><br>Year: %{{x}}<br>Rank: %{{y}}<extra></extra>"
             ))
         
-        # Add benchmark institutions
         for i, bench_inst in enumerate(st.session_state.benchmark_institutions):
             arwu_bench = arwu_df[arwu_df["Institution"] == bench_inst].sort_values("Year")
             if not arwu_bench.empty:
@@ -504,12 +635,11 @@ else:  # GRAS Subject
         st.warning(f"{inst_name} has no GRAS rankings.")
     elif not st.session_state.benchmark_institutions:
         st.info("👆 Add institutions to compare GRAS rankings.")
-    else:
+    elif bench_subject:
         fig_bench_gras = go.Figure()
         all_gras_years = list(range(2021, 2026))
         colors_bench = ["#1f77b4", "#e74c3c", "#2ca02c", "#9467bd", "#ff7f0e", "#8c564b", "#17becf", "#bcbd22"]
         
-        # Add main institution
         gras_inst1_subj = gras_inst[gras_inst["Subject"] == bench_subject].copy()
         if not gras_inst1_subj.empty:
             gras1_plot = gras_inst1_subj.set_index("Year").reindex(all_gras_years)
@@ -524,7 +654,6 @@ else:  # GRAS Subject
                 hovertemplate=f"<b>{inst_name}</b><br>Year: %{{x}}<br>Rank: %{{y}}<extra></extra>"
             ))
         
-        # Add benchmark institutions
         for i, bench_inst in enumerate(st.session_state.benchmark_institutions):
             gras_bench = gras_df[
                 (gras_df["Institution"] == bench_inst) & 
@@ -555,7 +684,6 @@ else:  # GRAS Subject
         
         st.plotly_chart(fig_bench_gras, use_container_width=True)
 
-# Clear all button
 if st.session_state.benchmark_institutions:
     if st.button("🗑️ Clear all benchmark institutions"):
         st.session_state.benchmark_institutions = []
