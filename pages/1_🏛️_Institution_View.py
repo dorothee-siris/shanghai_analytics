@@ -201,7 +201,7 @@ else:
     
     # ---------- ARWU Country Positioning (Regional Rank Evolution) ----------
     st.markdown("### Country Positioning")
-    st.caption(f"Top 3 in {inst_country} (2025) + 2 above/below selected institution. Hover for world rank.")
+    st.caption(f"Top 3 in {inst_country} (2025) + 2 above/below selected institution. Hover for details.")
     
     # Get context institutions
     context_institutions = get_context_institutions(
@@ -230,68 +230,117 @@ else:
         (arwu_df["Institution"].isin(display_institutions))
     ].copy()
     
-    fig_country = go.Figure()
+    # Create two columns for regional and global rank charts
+    col_regional, col_global = st.columns(2)
+    
     colors = px.colors.qualitative.Plotly
     
+    # Assign consistent colors to institutions
+    inst_colors = {}
     for i, institution in enumerate(display_institutions):
-        inst_data = arwu_country_all[arwu_country_all["Institution"] == institution].sort_values("Year")
-        inst_plot = inst_data.set_index("Year").reindex(all_years)
-        
-        is_selected = institution == inst_name
-        line_width = 4 if is_selected else 2
-        line_color = "#e74c3c" if is_selected else colors[i % len(colors)]
-        
-        hover_text = []
-        for yr in all_years:
-            if yr in inst_data["Year"].values:
-                row = inst_data[inst_data["Year"] == yr].iloc[0]
-                hover_text.append(
-                    f"<b>{institution}</b><br>Year: {yr}<br>Regional Rank: {int(row['Region_Rank_recomputed'])}<br>World Rank: {int(row['Rank_recomputed'])}"
-                )
-            else:
-                hover_text.append(None)
-        
-        fig_country.add_trace(go.Scatter(
-            x=all_years,
-            y=inst_plot["Region_Rank_recomputed"],
-            mode="lines+markers",
-            name=institution,
-            line=dict(color=line_color, width=line_width),
-            marker=dict(size=8 if not is_selected else 12),
-            connectgaps=False,
-            hovertemplate="%{text}<extra></extra>",
-            text=hover_text
-        ))
+        if institution == inst_name:
+            inst_colors[institution] = "#e74c3c"
+        else:
+            inst_colors[institution] = colors[i % len(colors)]
     
-    # Add labels at end of lines
-    for i, institution in enumerate(display_institutions):
-        inst_data = arwu_country_all[arwu_country_all["Institution"] == institution]
-        last_valid = inst_data[inst_data["Region_Rank_recomputed"].notna()].sort_values("Year")
-        if not last_valid.empty:
-            last_row = last_valid.iloc[-1]
+    # ---------- Regional Rank Chart ----------
+    with col_regional:
+        st.markdown("**Regional Rank**")
+        fig_country_regional = go.Figure()
+        
+        for institution in display_institutions:
+            inst_data = arwu_country_all[arwu_country_all["Institution"] == institution].sort_values("Year")
+            inst_plot = inst_data.set_index("Year").reindex(all_years)
+            
             is_selected = institution == inst_name
-            fig_country.add_annotation(
-                x=last_row["Year"],
-                y=last_row["Region_Rank_recomputed"],
-                text=institution[:25] + "…" if len(institution) > 25 else institution,
-                showarrow=False,
-                xanchor="left",
-                xshift=10,
-                font=dict(size=9, color="#e74c3c" if is_selected else "#555"),
-                opacity=0.9
-            )
+            line_width = 4 if is_selected else 2
+            
+            hover_text = []
+            for yr in all_years:
+                if yr in inst_data["Year"].values:
+                    row = inst_data[inst_data["Year"] == yr].iloc[0]
+                    hover_text.append(
+                        f"<b>{institution}</b><br>Year: {yr}<br>Regional Rank: {int(row['Region_Rank_recomputed'])}<br>World Rank: {int(row['Rank_recomputed'])}"
+                    )
+                else:
+                    hover_text.append(None)
+            
+            fig_country_regional.add_trace(go.Scatter(
+                x=all_years,
+                y=inst_plot["Region_Rank_recomputed"],
+                mode="lines+markers",
+                name=institution,
+                line=dict(color=inst_colors[institution], width=line_width),
+                marker=dict(size=8 if not is_selected else 12),
+                connectgaps=False,
+                hovertemplate="%{text}<extra></extra>",
+                text=hover_text,
+                legendgroup=institution
+            ))
+        
+        fig_country_regional.update_layout(
+            title=f"Regional Rank - {inst_country}",
+            xaxis=dict(title="Year", dtick=1, range=[2016.5, 2025.5]),
+            yaxis=dict(title=f"Regional Rank", autorange="reversed"),
+            height=450,
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.15,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=9)
+            ),
+            hovermode="closest"
+        )
+        
+        st.plotly_chart(fig_country_regional, use_container_width=True)
     
-    fig_country.update_layout(
-        title=f"Regional Rank Evolution - {inst_country}",
-        xaxis=dict(title="Year", dtick=1, range=[2016.5, 2026.5]),
-        yaxis=dict(title=f"Regional Rank ({inst_country})", autorange="reversed"),
-        height=500,
-        showlegend=False,
-        hovermode="closest",
-        margin=dict(r=200)
-    )
-    
-    st.plotly_chart(fig_country, use_container_width=True)
+    # ---------- Global Rank Chart ----------
+    with col_global:
+        st.markdown("**World Rank**")
+        fig_country_global = go.Figure()
+        
+        for institution in display_institutions:
+            inst_data = arwu_country_all[arwu_country_all["Institution"] == institution].sort_values("Year")
+            inst_plot = inst_data.set_index("Year").reindex(all_years)
+            
+            is_selected = institution == inst_name
+            line_width = 4 if is_selected else 2
+            
+            hover_text = []
+            for yr in all_years:
+                if yr in inst_data["Year"].values:
+                    row = inst_data[inst_data["Year"] == yr].iloc[0]
+                    hover_text.append(
+                        f"<b>{institution}</b><br>Year: {yr}<br>World Rank: {int(row['Rank_recomputed'])}<br>Regional Rank: {int(row['Region_Rank_recomputed'])}"
+                    )
+                else:
+                    hover_text.append(None)
+            
+            fig_country_global.add_trace(go.Scatter(
+                x=all_years,
+                y=inst_plot["Rank_recomputed"],
+                mode="lines+markers",
+                name=institution,
+                line=dict(color=inst_colors[institution], width=line_width),
+                marker=dict(size=8 if not is_selected else 12),
+                connectgaps=False,
+                hovertemplate="%{text}<extra></extra>",
+                text=hover_text,
+                legendgroup=institution,
+                showlegend=False  # Hide legend on second chart to avoid duplication
+            ))
+        
+        fig_country_global.update_layout(
+            title=f"World Rank - {inst_country}",
+            xaxis=dict(title="Year", dtick=1, range=[2016.5, 2025.5]),
+            yaxis=dict(title=f"World Rank", autorange="reversed"),
+            height=450,
+            hovermode="closest"
+        )
+        
+        st.plotly_chart(fig_country_global, use_container_width=True)
 
 # ============================================================================
 # GRAS SECTION
@@ -430,12 +479,6 @@ else:
         
         gras_display_institutions = gras_context + additional_gras_country
         
-        # Get institutions ranked in 2025 for this subject
-        gras_2025_institutions = gras_df[
-            (gras_df["Subject"] == selected_subject) &
-            (gras_df["Year"] == 2025)
-        ]["Institution"].tolist()
-        
         gras_country_all = gras_df[
             (gras_df["Country/Region"] == inst_country) & 
             (gras_df["Subject"] == selected_subject) &
@@ -443,74 +486,129 @@ else:
         ].copy()
         
         if not gras_country_all.empty:
-            fig_gras_country = go.Figure()
-            all_gras_years = list(range(2021, 2026))
+            # Get institutions ranked in 2025 for this subject
+            gras_2025_institutions = gras_df[
+                (gras_df["Subject"] == selected_subject) &
+                (gras_df["Year"] == 2025)
+            ]["Institution"].tolist()
             
-            for i, institution in enumerate(gras_display_institutions):
-                inst_subj_data = gras_country_all[gras_country_all["Institution"] == institution].sort_values("Year")
-                inst_subj_plot = inst_subj_data.set_index("Year").reindex(all_gras_years)
-                
-                is_selected = institution == inst_name
-                is_in_2025 = institution in gras_2025_institutions
-                line_width = 4 if is_selected else 2
-                line_color = "#e74c3c" if is_selected else colors[i % len(colors)]
-                line_dash = "solid" if is_in_2025 else "dot"
-                
-                hover_text = []
-                for yr in all_gras_years:
-                    if yr in inst_subj_data["Year"].values:
-                        row = inst_subj_data[inst_subj_data["Year"] == yr].iloc[0]
-                        regional_rank = int(row["Rank_region"]) if pd.notna(row.get("Rank_region")) else "N/A"
-                        global_rank = int(row["Rank_global"]) if pd.notna(row.get("Rank_global")) else "N/A"
-                        hover_text.append(
-                            f"<b>{institution}</b><br>Year: {yr}<br>Regional Rank: {regional_rank}<br>Global Rank: {global_rank}"
-                        )
-                    else:
-                        hover_text.append(None)
-                
-                fig_gras_country.add_trace(go.Scatter(
-                    x=all_gras_years,
-                    y=inst_subj_plot["Rank_region"],
-                    mode="lines+markers",
-                    name=institution,
-                    line=dict(color=line_color, width=line_width, dash=line_dash),
-                    marker=dict(size=8 if not is_selected else 12),
-                    connectgaps=False,
-                    hovertemplate="%{text}<extra></extra>",
-                    text=hover_text
-                ))
+            # Create two columns for regional and global rank charts
+            col_gras_regional, col_gras_global = st.columns(2)
             
-            # Add labels at end of lines
+            # Assign consistent colors to institutions
+            gras_inst_colors = {}
             for i, institution in enumerate(gras_display_institutions):
-                inst_data = gras_country_all[gras_country_all["Institution"] == institution]
-                last_valid = inst_data[inst_data["Rank_region"].notna()].sort_values("Year")
-                if not last_valid.empty:
-                    last_row = last_valid.iloc[-1]
+                if institution == inst_name:
+                    gras_inst_colors[institution] = "#e74c3c"
+                else:
+                    gras_inst_colors[institution] = colors[i % len(colors)]
+            
+            # ---------- GRAS Regional Rank Chart ----------
+            with col_gras_regional:
+                st.markdown("**Regional Rank**")
+                fig_gras_regional = go.Figure()
+                
+                for institution in gras_display_institutions:
+                    inst_subj_data = gras_country_all[gras_country_all["Institution"] == institution].sort_values("Year")
+                    inst_subj_plot = inst_subj_data.set_index("Year").reindex(all_gras_years)
+                    
                     is_selected = institution == inst_name
-                    fig_gras_country.add_annotation(
-                        x=last_row["Year"],
-                        y=last_row["Rank_region"],
-                        text=institution[:25] + "…" if len(institution) > 25 else institution,
-                        showarrow=False,
-                        xanchor="left",
-                        xshift=10,
-                        font=dict(size=9, color="#e74c3c" if is_selected else "#555"),
-                        opacity=0.9
-                    )
+                    is_in_2025 = institution in gras_2025_institutions
+                    line_width = 4 if is_selected else 2
+                    line_dash = "solid" if is_in_2025 else "dot"
+                    
+                    hover_text = []
+                    for yr in all_gras_years:
+                        if yr in inst_subj_data["Year"].values:
+                            row = inst_subj_data[inst_subj_data["Year"] == yr].iloc[0]
+                            regional_rank = int(row["Rank_region"]) if pd.notna(row.get("Rank_region")) else "N/A"
+                            global_rank = int(row["Rank_global"]) if pd.notna(row.get("Rank_global")) else "N/A"
+                            hover_text.append(
+                                f"<b>{institution}</b><br>Year: {yr}<br>Regional Rank: {regional_rank}<br>Global Rank: {global_rank}"
+                            )
+                        else:
+                            hover_text.append(None)
+                    
+                    fig_gras_regional.add_trace(go.Scatter(
+                        x=all_gras_years,
+                        y=inst_subj_plot["Rank_region"],
+                        mode="lines+markers",
+                        name=institution,
+                        line=dict(color=gras_inst_colors[institution], width=line_width, dash=line_dash),
+                        marker=dict(size=8 if not is_selected else 12),
+                        connectgaps=False,
+                        hovertemplate="%{text}<extra></extra>",
+                        text=hover_text,
+                        legendgroup=institution
+                    ))
+                
+                fig_gras_regional.update_layout(
+                    title=f"Regional Rank - {inst_country}",
+                    xaxis=dict(title="Year", dtick=1, range=[2020.5, 2025.5]),
+                    yaxis=dict(title=f"Regional Rank", autorange="reversed"),
+                    height=450,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.15,
+                        xanchor="center",
+                        x=0.5,
+                        font=dict(size=9)
+                    ),
+                    hovermode="closest"
+                )
+                
+                st.plotly_chart(fig_gras_regional, use_container_width=True)
             
-            fig_gras_country.update_layout(
-                title=f"{selected_subject} - Regional Rank Evolution in {inst_country}",
-                xaxis=dict(title="Year", dtick=1, range=[2020.5, 2026.5]),
-                yaxis=dict(title=f"Regional Rank ({inst_country})", autorange="reversed"),
-                height=500,
-                showlegend=False,
-                hovermode="closest",
-                margin=dict(r=200)
-            )
-            
-            st.plotly_chart(fig_gras_country, use_container_width=True)
-        else:
-            st.info(f"No data for {selected_subject} in {inst_country}.")
+            # ---------- GRAS Global Rank Chart ----------
+            with col_gras_global:
+                st.markdown("**Global Rank**")
+                fig_gras_global = go.Figure()
+                
+                for institution in gras_display_institutions:
+                    inst_subj_data = gras_country_all[gras_country_all["Institution"] == institution].sort_values("Year")
+                    inst_subj_plot = inst_subj_data.set_index("Year").reindex(all_gras_years)
+                    
+                    is_selected = institution == inst_name
+                    is_in_2025 = institution in gras_2025_institutions
+                    line_width = 4 if is_selected else 2
+                    line_dash = "solid" if is_in_2025 else "dot"
+                    
+                    hover_text = []
+                    for yr in all_gras_years:
+                        if yr in inst_subj_data["Year"].values:
+                            row = inst_subj_data[inst_subj_data["Year"] == yr].iloc[0]
+                            regional_rank = int(row["Rank_region"]) if pd.notna(row.get("Rank_region")) else "N/A"
+                            global_rank = int(row["Rank_global"]) if pd.notna(row.get("Rank_global")) else "N/A"
+                            hover_text.append(
+                                f"<b>{institution}</b><br>Year: {yr}<br>Global Rank: {global_rank}<br>Regional Rank: {regional_rank}"
+                            )
+                        else:
+                            hover_text.append(None)
+                    
+                    fig_gras_global.add_trace(go.Scatter(
+                        x=all_gras_years,
+                        y=inst_subj_plot["Rank_global"],
+                        mode="lines+markers",
+                        name=institution,
+                        line=dict(color=gras_inst_colors[institution], width=line_width, dash=line_dash),
+                        marker=dict(size=8 if not is_selected else 12),
+                        connectgaps=False,
+                        hovertemplate="%{text}<extra></extra>",
+                        text=hover_text,
+                        legendgroup=institution,
+                        showlegend=False
+                    ))
+                
+                fig_gras_global.update_layout(
+                    title=f"Global Rank - {selected_subject}",
+                    xaxis=dict(title="Year", dtick=1, range=[2020.5, 2025.5]),
+                    yaxis=dict(title=f"Global Rank", autorange="reversed"),
+                    height=450,
+                    hovermode="closest"
+                )
+                
+                st.plotly_chart(fig_gras_global, use_container_width=True)
 
 # ============================================================================
 # BENCHMARK SECTION
