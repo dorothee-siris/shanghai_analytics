@@ -450,7 +450,7 @@ else:
             ),
             yaxis=dict(
                 title="Normalized Score Contribution",
-                range=[0, 105],
+                range=[0, y_axis_max],
                 showgrid=True,
                 gridcolor='lightgray'
             ),
