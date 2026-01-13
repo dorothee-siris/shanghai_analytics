@@ -189,7 +189,6 @@ else:
     
     # Create hover text
     hover_texts = []
-    text_labels = []
     for _, row in arwu_plot.iterrows():
         if pd.notna(row.get(value_col)):
             score = row.get("Score_normalized", "N/A")
@@ -203,26 +202,21 @@ else:
                 f"Regional Rank: {regional_rank}<br>"
                 f"Score: {score_str}"
             )
-            text_labels.append(value_format(row[value_col]))
         else:
             hover_texts.append(None)
-            text_labels.append("")
     
     fig_arwu_rank = go.Figure()
     
     fig_arwu_rank.add_trace(go.Scatter(
         x=arwu_plot["Year"],
         y=arwu_plot[value_col],
-        mode="lines+markers+text",
+        mode="lines+markers",
         name=inst_name,
         line=dict(color="#1f77b4", width=3),
         marker=dict(size=12, color="#1f77b4"),
         connectgaps=False,
         hovertemplate="%{text}<extra></extra>",
-        text=hover_texts,
-        textposition="top center",
-        textfont=dict(size=10, color="#1f77b4"),
-        customdata=text_labels
+        text=hover_texts
     ))
     
     # Add text annotations for data point values (only current view value)
@@ -233,8 +227,8 @@ else:
                 y=row[value_col],
                 text=value_format(row[value_col]),
                 showarrow=False,
-                yshift=18 if not reverse_axis else -18,
-                font=dict(size=12, color="#1f77b4")
+                yshift=15 if not reverse_axis else -15,
+                font=dict(size=10, color="#1f77b4")
             )
     
     # Set y-axis range based on view
@@ -298,38 +292,32 @@ else:
         
         for i, indicator in enumerate(available_indicators):
             indicator_data = arwu_inst.set_index("Year").reindex(all_years)
-            color = colors_indicators[i % len(colors_indicators)]
             
             fig_indicators.add_trace(go.Scatter(
                 x=all_years,
                 y=indicator_data[indicator],
                 mode="lines+markers",
                 name=indicator,
-                line=dict(color=color, width=2),
+                line=dict(color=colors_indicators[i % len(colors_indicators)], width=2),
                 marker=dict(size=8),
                 connectgaps=False,
-                hovertemplate=f"<b>{indicator}</b><br>Year: %{{x}}<br>Score: %{{y:.1f}}<extra></extra>"
+                hovertemplate=f"<b>{indicator}</b>: %{{y:.1f}}<extra></extra>"
             ))
-            
-            # Add data labels for each point
-            for year in all_years:
-                if year in indicator_data.index and pd.notna(indicator_data.loc[year, indicator]):
-                    val = indicator_data.loc[year, indicator]
-                    fig_indicators.add_annotation(
-                        x=year, y=val, text=f"{val:.1f}", showarrow=False,
-                        yshift=14, font=dict(size=11, color=color)
-                    )
         
         fig_indicators.update_layout(
             title="ARWU Indicator Scores Over Time",
             xaxis=dict(
                 title="Year",
                 dtick=1,
-                range=[2016.5, 2025.5]
+                range=[2016.5, 2025.5],
+                showgrid=True,
+                gridcolor='lightgray'
             ),
             yaxis=dict(
                 title="Indicator Score",
-                range=[0, 105]
+                range=[0, 105],
+                showgrid=True,
+                gridcolor='lightgray'
             ),
             height=500,
             hovermode="x unified",
@@ -341,7 +329,8 @@ else:
                 x=0.5,
                 font=dict(size=11)
             ),
-            margin=dict(b=100)
+            margin=dict(b=100),
+            plot_bgcolor='white'
         )
         
         st.plotly_chart(fig_indicators, use_container_width=True)
@@ -516,7 +505,7 @@ else:
             if val is not None:
                 fig_hqr.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=14, font=dict(size=11, color="#9467bd")
+                    yshift=12, font=dict(size=9, color="#9467bd")
                 )
         
         fig_hqr.update_layout(
@@ -568,7 +557,7 @@ else:
             if val is not None:
                 fig_ri.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=14, font=dict(size=11, color="#ff7f0e")
+                    yshift=12, font=dict(size=9, color="#ff7f0e")
                 )
         
         fig_ri.update_layout(
@@ -622,7 +611,7 @@ else:
             if val is not None:
                 fig_ic.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=14, font=dict(size=11, color="#2ca02c")
+                    yshift=12, font=dict(size=9, color="#2ca02c")
                 )
         
         fig_ic.update_layout(
@@ -670,7 +659,7 @@ else:
             if val is not None:
                 fig_wcf.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=14, font=dict(size=11, color="#e377c2")
+                    yshift=12, font=dict(size=9, color="#e377c2")
                 )
         
         fig_wcf.update_layout(
@@ -719,7 +708,7 @@ else:
         if val is not None:
             fig_wco.add_annotation(
                 x=year, y=val, text=label, showarrow=False,
-                yshift=14, font=dict(size=11, color="#1f77b4")
+                yshift=12, font=dict(size=9, color="#1f77b4")
             )
     
     # AWARD (dotted, green, weighted)
@@ -755,7 +744,7 @@ else:
         if val is not None:
             fig_wco.add_annotation(
                 x=year, y=val, text=label, showarrow=False,
-                yshift=-17, font=dict(size=11, color="#2ca02c")
+                yshift=-15, font=dict(size=9, color="#2ca02c")
             )
     
     # WCO (solid, teal/blue-green)
@@ -791,7 +780,7 @@ else:
         if val is not None:
             fig_wco.add_annotation(
                 x=year, y=val, text=label, showarrow=False,
-                yshift=17, font=dict(size=11, color="#17becf")
+                yshift=15, font=dict(size=9, color="#17becf")
             )
     
     fig_wco.update_layout(
@@ -830,14 +819,6 @@ else:
     # All subjects for selection
     all_inst_subjects = sorted(gras_inst["Subject"].unique().tolist())
     
-    # Toggle for global vs regional rank
-    gras_rank_view = st.radio(
-        "View",
-        options=["Global Rank", "Regional Rank"],
-        horizontal=True,
-        key="gras_subject_rank_view"
-    )
-    
     # Multiselect for subjects
     display_subjects = st.multiselect(
         "Subjects to display (add or remove)",
@@ -850,10 +831,6 @@ else:
     
     if display_subjects:
         gras_evolution = gras_inst[gras_inst["Subject"].isin(display_subjects)].copy()
-        
-        # Determine rank column based on view
-        rank_col = "Rank_global" if gras_rank_view == "Global Rank" else "Rank_region"
-        rank_label = "Global Rank" if gras_rank_view == "Global Rank" else "Regional Rank"
         
         fig_gras_evo = go.Figure()
         colors = px.colors.qualitative.Plotly
@@ -869,26 +846,17 @@ else:
             
             fig_gras_evo.add_trace(go.Scatter(
                 x=all_gras_years,
-                y=subj_plot[rank_col],
+                y=subj_plot["Rank_global"],
                 mode="lines+markers",
                 name=subject,
                 line=dict(color=color, width=2, dash=line_dash),
                 marker=dict(size=8),
                 connectgaps=False,
-                hovertemplate=f"<b>{subject}</b><br>Year: %{{x}}<br>{rank_label}: %{{y}}<extra></extra>"
+                hovertemplate=f"<b>{subject}</b>: %{{y}}<extra></extra>"
             ))
-            
-            # Add data labels for each point
-            for year in all_gras_years:
-                if year in subj_plot.index and pd.notna(subj_plot.loc[year, rank_col]):
-                    val = int(subj_plot.loc[year, rank_col])
-                    fig_gras_evo.add_annotation(
-                        x=year, y=val, text=str(val), showarrow=False,
-                        yshift=-14, font=dict(size=10, color=color)
-                    )
         
         fig_gras_evo.update_layout(
-            title=f"GRAS {rank_label} by Subject",
+            title="GRAS Global Rank by Subject",
             xaxis=dict(
                 title="Year",
                 dtick=1,
@@ -897,13 +865,13 @@ else:
                 gridcolor='lightgray'
             ),
             yaxis=dict(
-                title=rank_label,
+                title="Global Rank",
                 autorange="reversed",
                 showgrid=True,
                 gridcolor='lightgray'
             ),
             height=550,
-            hovermode="closest",
+            hovermode="x unified",
             legend=dict(
                 orientation="h",
                 yanchor="top",
