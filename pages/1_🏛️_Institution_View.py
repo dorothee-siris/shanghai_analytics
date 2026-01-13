@@ -443,7 +443,7 @@ else:
                 showgrid=True,
                 gridcolor='lightgray'
             ),
-            height=600,  # Double height
+            height=800,  # Double height
             legend=dict(
                 orientation="h",
                 yanchor="top",
@@ -461,14 +461,6 @@ else:
         if not decomposition_df.empty:
             for _, row in decomposition_df.iterrows():
                 total = sum(row.get(f"{ind}_contribution", 0) for ind in available_indicators)
-                fig_decomposition.add_annotation(
-                    x=row["Year"],
-                    y=total,
-                    text=f"{total:.1f}",
-                    showarrow=False,
-                    yshift=10,
-                    font=dict(size=10, color="#333333", weight="bold")
-                )
         
         st.plotly_chart(fig_decomposition, use_container_width=True)
         
