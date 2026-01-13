@@ -395,6 +395,93 @@ else:
     # Download button for rankings table
     create_download_button(gras_pivot, f"GRAS_Rankings_Overview_{inst_name}", "dl_gras_table")
     
+    # ---------- GRAS Subject Rank Evolution ----------
+    st.markdown("### Subject Rank Evolution")
+    
+    latest_gras_year = gras_inst["Year"].max()
+    default_subjects, other_subjects = get_default_subjects(gras_inst, max_display=10)
+    
+    # Determine which subjects are ranked in 2025
+    subjects_in_2025 = gras_inst[gras_inst["Year"] == 2025]["Subject"].tolist()
+    
+    # All subjects for selection
+    all_inst_subjects = sorted(gras_inst["Subject"].unique().tolist())
+    
+    # Multiselect for subjects
+    display_subjects = st.multiselect(
+        "Subjects to display (add or remove)",
+        options=all_inst_subjects,
+        default=default_subjects,
+        key="gras_subjects_display"
+    )
+    
+    st.caption("━━ Plain line: ranked in 2025 | ┅┅ Dotted line: not ranked in 2025")
+    
+    if display_subjects:
+        gras_evolution = gras_inst[gras_inst["Subject"].isin(display_subjects)].copy()
+        
+        fig_gras_evo = go.Figure()
+        colors = px.colors.qualitative.Plotly
+        all_gras_years = list(range(2021, 2026))
+        
+        for i, subject in enumerate(display_subjects):
+            subj_data = gras_evolution[gras_evolution["Subject"] == subject].sort_values("Year")
+            subj_plot = subj_data.set_index("Year").reindex(all_gras_years)
+            
+            is_in_2025 = subject in subjects_in_2025
+            line_dash = "solid" if is_in_2025 else "dot"
+            color = colors[i % len(colors)]
+            
+            fig_gras_evo.add_trace(go.Scatter(
+                x=all_gras_years,
+                y=subj_plot["Rank_global"],
+                mode="lines+markers",
+                name=subject,
+                line=dict(color=color, width=2, dash=line_dash),
+                marker=dict(size=8),
+                connectgaps=False,
+                hovertemplate=f"<b>{subject}</b>: %{{y}}<extra></extra>"
+            ))
+        
+        fig_gras_evo.update_layout(
+            title="GRAS Global Rank by Subject",
+            xaxis=dict(
+                title="Year",
+                dtick=1,
+                range=[2020.5, 2025.5],
+                showgrid=True,
+                gridcolor='lightgray'
+            ),
+            yaxis=dict(
+                title="Global Rank",
+                autorange="reversed",
+                showgrid=True,
+                gridcolor='lightgray'
+            ),
+            height=550,
+            hovermode="x unified",
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.18,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=11)
+            ),
+            margin=dict(b=120),
+            plot_bgcolor='white'
+        )
+        
+        st.plotly_chart(fig_gras_evo, use_container_width=True)
+        
+        # Download button for subject evolution
+        gras_evo_download = gras_evolution[["Year", "Subject", "Field", "Rank_global", "Rank_region", "Score_recomputed"]].copy()
+        gras_evo_download.columns = ["Year", "Subject", "Field", "Global Rank", "Regional Rank", "Score"]
+        create_download_button(gras_evo_download, f"GRAS_Subject_Evolution_{inst_name}", "dl_gras_evolution")
+    else:
+        st.info("Select at least one subject to display the evolution chart.")
+
+
     # ---------- GRAS Indicators Evolution ----------
     st.markdown("### Indicators Score Evolution")
     
@@ -806,89 +893,3 @@ else:
         if col in gras_indicators_data.columns:
             gras_ind_download[col] = gras_indicators_data[col]
     create_download_button(gras_ind_download, f"GRAS_Indicators_{selected_indicator_subject}_{inst_name}", "dl_gras_indicators")
-    
-    # ---------- GRAS Subject Rank Evolution ----------
-    st.markdown("### Subject Rank Evolution")
-    
-    latest_gras_year = gras_inst["Year"].max()
-    default_subjects, other_subjects = get_default_subjects(gras_inst, max_display=10)
-    
-    # Determine which subjects are ranked in 2025
-    subjects_in_2025 = gras_inst[gras_inst["Year"] == 2025]["Subject"].tolist()
-    
-    # All subjects for selection
-    all_inst_subjects = sorted(gras_inst["Subject"].unique().tolist())
-    
-    # Multiselect for subjects
-    display_subjects = st.multiselect(
-        "Subjects to display (add or remove)",
-        options=all_inst_subjects,
-        default=default_subjects,
-        key="gras_subjects_display"
-    )
-    
-    st.caption("━━ Plain line: ranked in 2025 | ┅┅ Dotted line: not ranked in 2025")
-    
-    if display_subjects:
-        gras_evolution = gras_inst[gras_inst["Subject"].isin(display_subjects)].copy()
-        
-        fig_gras_evo = go.Figure()
-        colors = px.colors.qualitative.Plotly
-        all_gras_years = list(range(2021, 2026))
-        
-        for i, subject in enumerate(display_subjects):
-            subj_data = gras_evolution[gras_evolution["Subject"] == subject].sort_values("Year")
-            subj_plot = subj_data.set_index("Year").reindex(all_gras_years)
-            
-            is_in_2025 = subject in subjects_in_2025
-            line_dash = "solid" if is_in_2025 else "dot"
-            color = colors[i % len(colors)]
-            
-            fig_gras_evo.add_trace(go.Scatter(
-                x=all_gras_years,
-                y=subj_plot["Rank_global"],
-                mode="lines+markers",
-                name=subject,
-                line=dict(color=color, width=2, dash=line_dash),
-                marker=dict(size=8),
-                connectgaps=False,
-                hovertemplate=f"<b>{subject}</b>: %{{y}}<extra></extra>"
-            ))
-        
-        fig_gras_evo.update_layout(
-            title="GRAS Global Rank by Subject",
-            xaxis=dict(
-                title="Year",
-                dtick=1,
-                range=[2020.5, 2025.5],
-                showgrid=True,
-                gridcolor='lightgray'
-            ),
-            yaxis=dict(
-                title="Global Rank",
-                autorange="reversed",
-                showgrid=True,
-                gridcolor='lightgray'
-            ),
-            height=550,
-            hovermode="x unified",
-            legend=dict(
-                orientation="h",
-                yanchor="top",
-                y=-0.18,
-                xanchor="center",
-                x=0.5,
-                font=dict(size=11)
-            ),
-            margin=dict(b=120),
-            plot_bgcolor='white'
-        )
-        
-        st.plotly_chart(fig_gras_evo, use_container_width=True)
-        
-        # Download button for subject evolution
-        gras_evo_download = gras_evolution[["Year", "Subject", "Field", "Rank_global", "Rank_region", "Score_recomputed"]].copy()
-        gras_evo_download.columns = ["Year", "Subject", "Field", "Global Rank", "Regional Rank", "Score"]
-        create_download_button(gras_evo_download, f"GRAS_Subject_Evolution_{inst_name}", "dl_gras_evolution")
-    else:
-        st.info("Select at least one subject to display the evolution chart.")
