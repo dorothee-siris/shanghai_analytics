@@ -338,8 +338,146 @@ else:
         # Download button for indicators
         indicators_download_df = arwu_inst[["Year", "Institution"] + available_indicators].copy()
         create_download_button(indicators_download_df, f"ARWU_Indicators_{inst_name}", "dl_arwu_indicators")
+        
+        # ---------- ARWU Score Decomposition (Stacked Bar Chart) ----------
+        st.markdown("### Score Decomposition by Indicator")
+        st.caption("Contribution of each indicator to the total normalized score. Weights: Alumni (10%), Award (20%), HiCi (20%), N&S (20%), PUB (20%), PCP (10%).")
+        
+        # Define indicator weights
+        indicator_weights = {
+            "Alumni": 0.1,
+            "Award": 0.2,
+            "HiCi": 0.2,
+            "N&S": 0.2,
+            "PUB": 0.2,
+            "PCP": 0.1
+        }
+        
+        # Colors for each indicator (matching the line chart)
+        indicator_colors = {
+            "Alumni": colors_indicators[0],
+            "Award": colors_indicators[1],
+            "HiCi": colors_indicators[2],
+            "N&S": colors_indicators[3],
+            "PUB": colors_indicators[4],
+            "PCP": colors_indicators[5]
+        }
+        
+        fig_decomposition = go.Figure()
+        
+        # Calculate contributions for each year
+        decomposition_data = []
+        
+        for year in all_years:
+            year_data = arwu_inst[arwu_inst["Year"] == year]
+            if not year_data.empty:
+                row = year_data.iloc[0]
+                score_normalized = row.get("Score_normalized", 0)
+                score_raw = row.get("Score_raw", 0)
+                
+                # Calculate normalization coefficient
+                if pd.notna(score_raw) and score_raw > 0 and pd.notna(score_normalized):
+                    norm_coef = score_normalized / score_raw
+                else:
+                    norm_coef = 1
+                
+                year_contributions = {"Year": year}
+                for indicator in available_indicators:
+                    raw_value = row.get(indicator, 0) or 0
+                    weight = indicator_weights.get(indicator, 0)
+                    weighted_value = raw_value * weight
+                    normalized_contribution = weighted_value * norm_coef
+                    
+                    year_contributions[f"{indicator}_raw"] = raw_value
+                    year_contributions[f"{indicator}_weighted"] = weighted_value
+                    year_contributions[f"{indicator}_contribution"] = normalized_contribution
+                
+                year_contributions["Score_normalized"] = score_normalized
+                year_contributions["Score_raw"] = score_raw
+                year_contributions["Norm_coef"] = norm_coef
+                decomposition_data.append(year_contributions)
+        
+        decomposition_df = pd.DataFrame(decomposition_data)
+        
+        # Create stacked bar chart
+        for indicator in available_indicators:
+            contribution_col = f"{indicator}_contribution"
+            
+            if contribution_col in decomposition_df.columns:
+                # Build hover text
+                hover_texts = []
+                for _, row in decomposition_df.iterrows():
+                    raw_val = row.get(f"{indicator}_raw", 0)
+                    weighted_val = row.get(f"{indicator}_weighted", 0)
+                    contrib_val = row.get(contribution_col, 0)
+                    weight_pct = int(indicator_weights.get(indicator, 0) * 100)
+                    
+                    hover_texts.append(
+                        f"<b>{indicator}</b><br>"
+                        f"Raw Score: {raw_val:.1f}<br>"
+                        f"Weight: {weight_pct}%<br>"
+                        f"Weighted (raw × weight): {weighted_val:.1f}<br>"
+                        f"Normalized Contribution: {contrib_val:.1f}"
+                    )
+                
+                fig_decomposition.add_trace(go.Bar(
+                    x=decomposition_df["Year"],
+                    y=decomposition_df[contribution_col],
+                    name=f"{indicator} ({int(indicator_weights.get(indicator, 0)*100)}%)",
+                    marker_color=indicator_colors.get(indicator, "#999999"),
+                    hovertemplate="%{text}<extra></extra>",
+                    text=hover_texts
+                ))
+        
+        fig_decomposition.update_layout(
+            barmode='stack',
+            xaxis=dict(
+                title="Year",
+                dtick=1,
+                showgrid=True,
+                gridcolor='lightgray'
+            ),
+            yaxis=dict(
+                title="Normalized Score Contribution",
+                range=[0, 105],
+                showgrid=True,
+                gridcolor='lightgray'
+            ),
+            height=600,  # Double height
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.1,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=11)
+            ),
+            margin=dict(b=100),
+            plot_bgcolor='white',
+            hovermode="x unified"
+        )
+        
+        # Add total score annotation on top of each bar
+        if not decomposition_df.empty:
+            for _, row in decomposition_df.iterrows():
+                total = sum(row.get(f"{ind}_contribution", 0) for ind in available_indicators)
+                fig_decomposition.add_annotation(
+                    x=row["Year"],
+                    y=total,
+                    text=f"{total:.1f}",
+                    showarrow=False,
+                    yshift=10,
+                    font=dict(size=10, color="#333333", weight="bold")
+                )
+        
+        st.plotly_chart(fig_decomposition, use_container_width=True)
+        
+        # Download button for decomposition
+        decomposition_download = decomposition_df.copy()
+        create_download_button(decomposition_download, f"ARWU_Score_Decomposition_{inst_name}", "dl_arwu_decomposition")
     else:
         st.info("No indicator data available for this institution.")
+
 
 # ============================================================================
 # GRAS SECTION
