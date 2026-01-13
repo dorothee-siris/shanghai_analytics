@@ -429,6 +429,16 @@ else:
                     text=hover_texts,
                     textposition="none"  # Hide text labels on bars
                 ))
+
+        # Calculate max total score for y-axis range
+        max_total_score = 0
+        if not decomposition_df.empty:
+            for _, row in decomposition_df.iterrows():
+                total = sum(row.get(f"{ind}_contribution", 0) for ind in available_indicators)
+                if total > max_total_score:
+                    max_total_score = total
+        
+        y_axis_max = max_total_score + 5 if max_total_score > 0 else 105
         
         fig_decomposition.update_layout(
             barmode='stack',
