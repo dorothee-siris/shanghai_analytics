@@ -19,7 +19,8 @@ Welcome to the University Rankings Dashboard. This tool allows you to explore
 ### Available Views
 
 - **🏛️ Institution View**: Analyze a specific institution's performance over time
-- **🌍 Country View**: Compare institutions within a country *(coming soon)*
+- **🔄 Benchmark**: Compare institutions between them
+- **🌍 Country View**: Compare country performance in ARWU and GRAS
 
 Use the sidebar to navigate between views.
 """)
