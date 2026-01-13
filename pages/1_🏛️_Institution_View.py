@@ -592,7 +592,7 @@ else:
             if val is not None:
                 fig_hqr.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=12, font=dict(size=9, color="#9467bd")
+                    yshift=12, font=dict(size=11, color="#9467bd")
                 )
         
         fig_hqr.update_layout(
@@ -644,7 +644,7 @@ else:
             if val is not None:
                 fig_ri.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=12, font=dict(size=9, color="#ff7f0e")
+                    yshift=12, font=dict(size=11, color="#ff7f0e")
                 )
         
         fig_ri.update_layout(
@@ -698,7 +698,7 @@ else:
             if val is not None:
                 fig_ic.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=12, font=dict(size=9, color="#2ca02c")
+                    yshift=12, font=dict(size=11, color="#2ca02c")
                 )
         
         fig_ic.update_layout(
@@ -746,7 +746,7 @@ else:
             if val is not None:
                 fig_wcf.add_annotation(
                     x=year, y=val, text=label, showarrow=False,
-                    yshift=12, font=dict(size=9, color="#e377c2")
+                    yshift=12, font=dict(size=11, color="#e377c2")
                 )
         
         fig_wcf.update_layout(
@@ -795,7 +795,7 @@ else:
         if val is not None:
             fig_wco.add_annotation(
                 x=year, y=val, text=label, showarrow=False,
-                yshift=12, font=dict(size=9, color="#1f77b4")
+                yshift=12, font=dict(size=11, color="#1f77b4")
             )
     
     # AWARD (dotted, green, weighted)
@@ -831,7 +831,7 @@ else:
         if val is not None:
             fig_wco.add_annotation(
                 x=year, y=val, text=label, showarrow=False,
-                yshift=-15, font=dict(size=9, color="#2ca02c")
+                yshift=-15, font=dict(size=11, color="#2ca02c")
             )
     
     # WCO (solid, teal/blue-green)
@@ -867,7 +867,7 @@ else:
         if val is not None:
             fig_wco.add_annotation(
                 x=year, y=val, text=label, showarrow=False,
-                yshift=15, font=dict(size=9, color="#17becf")
+                yshift=15, font=dict(size=11, color="#17becf")
             )
     
     fig_wco.update_layout(
